@@ -1,14 +1,14 @@
-name: Eaglercraft Public Server (Cloudflare Tunnel)
+name: Eaglercraft Public Server
 
 on:
   workflow_dispatch:
     inputs:
       max_players:
-        description: 'Max players'
+        description: 'Max Players'
         required: false
-        default: '10'
+        default: '20'
       server_port:
-        description: 'Server port'
+        description: 'Server Port'
         required: false
         default: '25565'
 
@@ -17,53 +17,39 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    
     - name: Setup Java
       uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Download Eaglercraft Server
+    - name: Install Docker
       run: |
-        # Download the server jar (adjust URL as needed)
-        wget -O server.jar https://github.com/LAX1DUDE/eaglercraft/releases/latest/download/Server.jar
-        # Alternative: Use a specific version
-        # wget -O server.jar https://github.com/LAX1DUDE/eaglercraft/raw/main/Server/server.jar
+        sudo apt-get update
+        sudo apt-get install -y docker.io
+        sudo systemctl start docker
+        sudo usermod -aG docker $USER
     
-    - name: Create Server Properties
+    - name: Start Eaglercraft Server (Docker)
       run: |
-        cat > server.properties << EOF
-        port=${{ github.event.inputs.server_port || 25565 }}
-        max-players=${{ github.event.inputs.max_players || 10 }}
-        motd=GitHub Actions Eaglercraft Server
-        online-mode=false
-        EOF
-    
-    - name: Start Eaglercraft Server
-      run: |
-        echo "Starting Eaglercraft server on port ${{ github.event.inputs.server_port || 25565 }}..."
-        java -Xmx1024M -Xms1024M -jar server.jar &
+        docker run -d \
+          --name eaglercraft \
+          -p ${{ github.event.inputs.server_port || 25565 }}:${{ github.event.inputs.server_port || 25565 }} \
+          ghcr.io/yangchuansheng/eaglerx1.8server:1.12.1
         sleep 10
-        echo "Server started!"
+        docker ps
+        docker logs eaglercraft
     
     - name: Install Cloudflare Tunnel
       run: |
-        # Download cloudflared
         wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
         chmod +x cloudflared-linux-amd64
         sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
     
-    - name: Expose Server via Cloudflare Tunnel
+    - name: Get Public URL
       run: |
-        echo "=================================================="
-        echo "🌐 PUBLIC SERVER URL:"
-        echo "=================================================="
+        echo "================================================"
+        echo "🌐 SERVER IS PUBLIC AT:"
+        echo "================================================"
         echo ""
-        echo "Your server will be available at:"
-        cloudflared tunnel --url http://localhost:${{ github.event.inputs.server_port || 25565 }} \
-          --protocol http2 \
-          --no-autoupdate
-      continue-on-error: false
+        cloudflared tunnel --url http://localhost:${{ github.event.inputs.server_port || 25565 }}
