@@ -1,0 +1,69 @@
+name: Eaglercraft Public Server (Cloudflare Tunnel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_players:
+        description: 'Max players'
+        required: false
+        default: '10'
+      server_port:
+        description: 'Server port'
+        required: false
+        default: '25565'
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Download Eaglercraft Server
+      run: |
+        # Download the server jar (adjust URL as needed)
+        wget -O server.jar https://github.com/LAX1DUDE/eaglercraft/releases/latest/download/Server.jar
+        # Alternative: Use a specific version
+        # wget -O server.jar https://github.com/LAX1DUDE/eaglercraft/raw/main/Server/server.jar
+    
+    - name: Create Server Properties
+      run: |
+        cat > server.properties << EOF
+        port=${{ github.event.inputs.server_port || 25565 }}
+        max-players=${{ github.event.inputs.max_players || 10 }}
+        motd=GitHub Actions Eaglercraft Server
+        online-mode=false
+        EOF
+    
+    - name: Start Eaglercraft Server
+      run: |
+        echo "Starting Eaglercraft server on port ${{ github.event.inputs.server_port || 25565 }}..."
+        java -Xmx1024M -Xms1024M -jar server.jar &
+        sleep 10
+        echo "Server started!"
+    
+    - name: Install Cloudflare Tunnel
+      run: |
+        # Download cloudflared
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+        chmod +x cloudflared-linux-amd64
+        sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+    
+    - name: Expose Server via Cloudflare Tunnel
+      run: |
+        echo "=================================================="
+        echo "🌐 PUBLIC SERVER URL:"
+        echo "=================================================="
+        echo ""
+        echo "Your server will be available at:"
+        cloudflared tunnel --url http://localhost:${{ github.event.inputs.server_port || 25565 }} \
+          --protocol http2 \
+          --no-autoupdate
+      continue-on-error: false
