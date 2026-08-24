@@ -2,59 +2,38 @@ name: Eaglercraft Public Server
 
 on:
   workflow_dispatch:
-    inputs:
-      max_players:
-        description: 'Max Players'
-        required: false
-        default: '20'
 
 jobs:
   server:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Setup Java
       uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
-    
-    - name: Download Paper 1.12.2
+
+    - name: Clone Eaglercraft-Server-Paper
       run: |
-        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.12.2/builds/latest/downloads/paper-1.12.2-latest.jar
-    
-    - name: Download Eaglercraft Plugin
+        git clone https://github.com/Eaglercraft-Templates/Eaglercraft-Server-Paper.git server
+        cd server
+
+    - name: Start Server
       run: |
-        mkdir -p plugins
-        wget -O plugins/EaglerXServer.jar https://github.com/lax1dude/eaglerxserver/releases/latest/download/EaglerXServer.jar
-    
-    - name: Create Server Properties
-      run: |
-        cat > server.properties << EOF
-        server-port=25565
-        max-players=${{ github.event.inputs.max_players || 20 }}
-        motd=Eaglercraft Server on GitHub Actions
-        online-mode=false
-        EOF
-    
-    - name: Start Eaglercraft Server
-      run: |
-        echo "Starting server..."
-        java -Xmx1024M -Xms512M -jar paper.jar --nogui &
+        cd server
+        chmod +x run.sh
+        ./run.sh &
         sleep 20
-        echo "Server is running!"
-    
+
     - name: Install Cloudflare Tunnel
       run: |
         curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
         chmod +x cloudflared
-    
+
     - name: Get Public URL
       run: |
         echo "================================================"
         echo "🌐 SERVER IS PUBLIC AT:"
         echo "================================================"
-        echo ""
-        echo "Copy this URL and share with players:"
-        echo ""
         ./cloudflared tunnel --url http://localhost:25565
