@@ -8,7 +8,7 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - name: Setup Java
+    - name: Setup Java (for building)
       uses: actions/setup-java@v4
       with:
         java-version: '17'
@@ -20,15 +20,26 @@ jobs:
         
     - name: Download Portable JRE
       run: |
-        curl -L -o jre.zip https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.9%2B9/OpenJDK17U-jre_x64_windows_hotspot_17.0.9_9.zip
+        echo "Downloading portable JRE..."
+        curl -L -o jre.zip https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_windows_hotspot_17.0.12_7.zip
+        echo "Extracting JRE..."
         powershell Expand-Archive -Path jre.zip -DestinationPath .
-        move openjdk-* jre
+        echo "Finding extracted folder..."
+        dir
+        echo "Renaming to jre..."
+        # Find the folder that starts with "jdk" or "openjdk"
+        for /d %%i in (jdk-* openjdk-*) do (
+          echo "Renaming %%i to jre"
+          move %%i jre
+        )
+        echo "JRE setup complete!"
+        dir jre
         
     - name: Download Cloudflare Tunnel
       run: |
         curl -L -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
         
-    - name: Create launcher
+    - name: Create launcher scripts
       run: |
         @"
         @echo off
@@ -40,13 +51,18 @@ jobs:
         cd /d "%~dp0"
         set JAVA_HOME=%~dp0jre
         set PATH=%JAVA_HOME%\bin;%PATH%
-        start /min "Minecraft Server" "%~dp0jre\bin\java.exe" -Xmx1024M -Xms1024M -jar server\server.jar nogui
+        echo Using Java from: %JAVA_HOME%
+        echo.
+        echo Starting Minecraft server...
+        start /min "Minecraft Server" "%~dp0jre\bin\java.exe" -Xmx1024M -Xms1024M -jar server\paper-1.12.2.jar nogui
         echo Waiting for server to start...
-        timeout /t 10 /nobreak >nul
+        timeout /t 15 /nobreak >nul
         echo.
         echo ================================================
         echo  🌐 SERVER IS PUBLIC AT:
         echo ================================================
+        echo.
+        echo Your server is now accessible via Cloudflare Tunnel!
         echo.
         cloudflared.exe tunnel --url http://localhost:25565
         pause
@@ -68,23 +84,68 @@ jobs:
         echo.
         echo Server is starting in the other window!
         echo.
+        echo To stop the server, close both windows.
+        echo.
         pause
         "@ > start-server.bat
         
-    - name: Package
+    - name: Create README
+      run: |
+        @"
+        EAGLERCRAFT PUBLIC SERVER - PORTABLE WINDOWS VERSION
+        ====================================================
+        
+        NO JAVA INSTALLATION REQUIRED! Everything is included.
+        
+        HOW TO USE:
+        1. Extract the ZIP anywhere (USB drive, desktop, etc.)
+        2. Double-click "start-server.bat"
+        3. Wait for the server to start (about 15 seconds)
+        4. A new window will show your public URL
+        5. Share that URL with your friends!
+        
+        WHAT'S INCLUDED:
+        - Eaglercraft Server (Paper 1.12.2)
+        - Portable Java 17 JRE (no system install needed)
+        - Cloudflare Tunnel for public access
+        - Popular plugins: AuthMe, EaglerXRewind, SkinsRestorer, ViaVersion, etc.
+        
+        SYSTEM REQUIREMENTS:
+        - Windows 10/11 (64-bit)
+        - ~300MB free disk space
+        - Internet connection for Cloudflare Tunnel
+        
+        NOTES:
+        - The public URL changes each time you start
+        - Your world saves inside the "server" folder
+        - Server properties: server\server.properties
+        - Close both windows or press Ctrl+C to stop
+        
+        PORTABLE: You can run this from a USB drive!
+        "@ > README.txt
+        
+    - name: Package everything
       run: |
         mkdir package
         copy cloudflared.exe package\
         copy run-server.bat package\
         copy start-server.bat package\
+        copy README.txt package\
         xcopy /E /I server package\server
         xcopy /E /I jre package\jre
+        
+    - name: List package contents (debug)
+      run: |
+        echo "Package contents:"
+        dir package
+        echo "JRE contents:"
+        dir package\jre
         
     - name: Create ZIP
       run: |
         powershell Compress-Archive -Path package\* -DestinationPath Eaglercraft-Portable.zip
         
-    - name: Upload
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: Eaglercraft-Portable-Windows
