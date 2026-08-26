@@ -1,0 +1,91 @@
+name: Eaglercraft Portable Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Clone Eaglercraft Server
+      run: |
+        git clone https://github.com/Eaglercraft-Templates/Eaglercraft-Server-Paper.git server
+        
+    - name: Download Portable JRE
+      run: |
+        curl -L -o jre.zip https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.9%2B9/OpenJDK17U-jre_x64_windows_hotspot_17.0.9_9.zip
+        powershell Expand-Archive -Path jre.zip -DestinationPath .
+        move openjdk-* jre
+        
+    - name: Download Cloudflare Tunnel
+      run: |
+        curl -L -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+        
+    - name: Create launcher
+      run: |
+        @"
+        @echo off
+        title Eaglercraft Server
+        echo ================================================
+        echo  Starting Eaglercraft Server...
+        echo ================================================
+        echo.
+        cd /d "%~dp0"
+        set JAVA_HOME=%~dp0jre
+        set PATH=%JAVA_HOME%\bin;%PATH%
+        start /min "Minecraft Server" "%~dp0jre\bin\java.exe" -Xmx1024M -Xms1024M -jar server\server.jar nogui
+        echo Waiting for server to start...
+        timeout /t 10 /nobreak >nul
+        echo.
+        echo ================================================
+        echo  🌐 SERVER IS PUBLIC AT:
+        echo ================================================
+        echo.
+        cloudflared.exe tunnel --url http://localhost:25565
+        pause
+        "@ > run-server.bat
+        
+        @"
+        @echo off
+        title Eaglercraft Launcher
+        echo ================================================
+        echo  EAGLERCRAFT PUBLIC SERVER
+        echo ================================================
+        echo.
+        echo This package includes its own Java runtime.
+        echo No installation required!
+        echo.
+        echo Press any key to start the server...
+        pause >nul
+        start "Eaglercraft Server" run-server.bat
+        echo.
+        echo Server is starting in the other window!
+        echo.
+        pause
+        "@ > start-server.bat
+        
+    - name: Package
+      run: |
+        mkdir package
+        copy cloudflared.exe package\
+        copy run-server.bat package\
+        copy start-server.bat package\
+        xcopy /E /I server package\server
+        xcopy /E /I jre package\jre
+        
+    - name: Create ZIP
+      run: |
+        powershell Compress-Archive -Path package\* -DestinationPath Eaglercraft-Portable.zip
+        
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: Eaglercraft-Portable-Windows
+        path: Eaglercraft-Portable.zip
