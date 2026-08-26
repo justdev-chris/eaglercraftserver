@@ -20,24 +20,28 @@ jobs:
         
     - name: Download Portable JRE
       run: |
-        echo "Downloading portable JRE..."
-        curl -L -o jre.zip https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_windows_hotspot_17.0.12_7.zip
-        echo "Extracting JRE..."
-        powershell Expand-Archive -Path jre.zip -DestinationPath .
-        echo "Finding extracted folder..."
-        dir
-        echo "Renaming to jre..."
+        Write-Host "Downloading portable JRE..."
+        curl.exe -L -o jre.zip https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_windows_hotspot_17.0.12_7.zip
+        Write-Host "Extracting JRE..."
+        Expand-Archive -Path jre.zip -DestinationPath .
+        Write-Host "Finding extracted folder..."
+        Get-ChildItem -Directory
         # Find the folder that starts with "jdk" or "openjdk"
-        for /d %%i in (jdk-* openjdk-*) do (
-          echo "Renaming %%i to jre"
-          move %%i jre
-        )
-        echo "JRE setup complete!"
-        dir jre
+        $jreFolder = Get-ChildItem -Directory | Where-Object { $_.Name -like "jdk-*" -or $_.Name -like "openjdk-*" } | Select-Object -First 1
+        if ($jreFolder) {
+            Write-Host "Renaming $($jreFolder.Name) to jre"
+            Rename-Item -Path $jreFolder.FullName -NewName "jre"
+        } else {
+            Write-Host "ERROR: Could not find JRE folder!"
+            Get-ChildItem -Directory
+            exit 1
+        }
+        Write-Host "JRE setup complete!"
+        Get-ChildItem -Directory
         
     - name: Download Cloudflare Tunnel
       run: |
-        curl -L -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+        curl.exe -L -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
         
     - name: Create launcher scripts
       run: |
@@ -126,24 +130,24 @@ jobs:
         
     - name: Package everything
       run: |
-        mkdir package
-        copy cloudflared.exe package\
-        copy run-server.bat package\
-        copy start-server.bat package\
-        copy README.txt package\
-        xcopy /E /I server package\server
-        xcopy /E /I jre package\jre
+        New-Item -ItemType Directory -Force -Path package
+        Copy-Item cloudflared.exe package\
+        Copy-Item run-server.bat package\
+        Copy-Item start-server.bat package\
+        Copy-Item README.txt package\
+        Copy-Item -Recurse server package\server
+        Copy-Item -Recurse jre package\jre
         
     - name: List package contents (debug)
       run: |
-        echo "Package contents:"
-        dir package
-        echo "JRE contents:"
-        dir package\jre
+        Write-Host "Package contents:"
+        Get-ChildItem package
+        Write-Host "JRE contents:"
+        Get-ChildItem package\jre
         
     - name: Create ZIP
       run: |
-        powershell Compress-Archive -Path package\* -DestinationPath Eaglercraft-Portable.zip
+        Compress-Archive -Path package\* -DestinationPath Eaglercraft-Portable.zip
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
