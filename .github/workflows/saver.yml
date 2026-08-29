@@ -14,6 +14,9 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
     - name: Clone Eaglercraft-Server-Paper
       run: |
         git clone https://github.com/Eaglercraft-Templates/Eaglercraft-Server-Paper.git server
@@ -21,10 +24,11 @@ jobs:
 
     - name: Restore World from Repo
       run: |
-        if [ -d "world" ]; then
+        mkdir -p server/world
+        if [ -d "world" ] && [ "$(ls -A world)" ]; then
           echo "✅ Restoring world from repo..."
-          mkdir -p server/world
           cp -r world/* server/world/
+          echo "📁 World size: $(du -sh world | cut -f1)"
         else
           echo "ℹ️ No world backup found, starting fresh."
         fi
@@ -34,7 +38,9 @@ jobs:
         cd server
         chmod +x run.sh
         ./run.sh &
-        sleep 20
+        echo "⏳ Waiting for server to start..."
+        sleep 30
+        echo "✅ Server should be running!"
 
     - name: Install Cloudflare Tunnel
       run: |
@@ -46,15 +52,33 @@ jobs:
         echo "================================================"
         echo "🌐 SERVER IS PUBLIC AT:"
         echo "================================================"
+        echo ""
+        echo "  ⚠️  This URL will change every run!"
+        echo ""
         ./cloudflared tunnel --url http://localhost:25565
 
     - name: Commit World Back to Repo
       if: always()
       run: |
-        rm -rf world
-        cp -r server/world world
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add world
-        git diff --staged --quiet || git commit -m "💾 Auto-save world [skip ci]"
-        git push
+        if [ -d "server/world" ] && [ "$(ls -A server/world)" ]; then
+          echo "💾 Saving world to repo..."
+          rm -rf world
+          cp -r server/world world
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add world
+          git diff --staged --quiet || git commit -m "💾 Auto-save world [skip ci]"
+          git push
+          echo "✅ World saved to repo!"
+          echo "📁 World size: $(du -sh world | cut -f1)"
+        else
+          echo "⚠️ No world data to save"
+        fi
+
+    - name: Upload World as Artifact (Backup)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: world-backup-${{ github.run_id }}
+        path: server/world
+        retention-days: 90
