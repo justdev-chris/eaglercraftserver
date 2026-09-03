@@ -1,4 +1,4 @@
-name: Eaglercraft Public Server saver
+name: Eaglercraft Public Server
 
 on:
   workflow_dispatch:
@@ -33,33 +33,23 @@ jobs:
           echo "ℹ️ No world backup found, starting fresh."
         fi
 
-    - name: Create Web Directory & Copy index.html
+    - name: Setup Web Directory
       run: |
         mkdir -p web
         if [ -f "index.html" ]; then
           cp index.html web/
-          echo "✅ Copied index.html to web/"
+          echo "✅ index.html copied to web/"
         else
-          echo "⚠️ index.html not found, creating placeholder..."
-          cat > web/index.html << 'EOF'
-<!DOCTYPE html>
-<html>
-<head><title>File Server</title></head>
-<body>
-<h1>📁 File Server</h1>
-<p>Place your index.html in the repo root to serve it here.</p>
-</body>
-</html>
-EOF
+          echo "⚠️ index.html not found in repo root"
         fi
 
-    - name: Start Python HTTP Server (Port 8000)
+    - name: Start Python HTTP Server
       run: |
         cd web
         python3 -m http.server 8000 &
         echo "✅ Web server started on port 8000"
 
-    - name: Start Eaglercraft Server (Port 25565)
+    - name: Start Eaglercraft Server
       run: |
         cd server
         chmod +x run.sh
@@ -73,30 +63,32 @@ EOF
         curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
         chmod +x cloudflared
 
-    - name: Get Public URLs (Both Services)
+    - name: Start Tunnel for Eaglercraft
+      run: |
+        echo "🌐 Starting Cloudflare tunnel for Eaglercraft (port 25565)..."
+        ./cloudflared tunnel --url http://localhost:25565 &
+        sleep 5
+
+    - name: Start Tunnel for Web Server
+      run: |
+        echo "🌐 Starting Cloudflare tunnel for Web Server (port 8000)..."
+        echo "📁 Your index.html will be accessible at: /a"
+        ./cloudflared tunnel --url http://localhost:8000 &
+        sleep 5
+
+    - name: Keep Tunnel Alive
       run: |
         echo "================================================"
         echo "🌐 PUBLIC URLs:"
         echo "================================================"
         echo ""
-        echo "  🎮 EAGLERCRAFT:   https://tunnel-url/"
-        echo "  📁 MEDIA PLAYER:  https://tunnel-url/a"
+        echo "  🎮 EAGLERCRAFT:   Check logs above for URL"
+        echo "  📁 MEDIA PLAYER:  Check logs above for URL (path: /a)"
         echo ""
-        echo "  ⚠️  URL changes every run!"
+        echo "  ⚠️  URLs change every run!"
         echo "================================================"
         echo ""
-        echo "🚀 Starting tunnel for both ports..."
-        echo "   (Eaglercraft on 25565, Web on 8000)"
-        echo ""
-
-        # Run both services through the same tunnel
-        ./cloudflared tunnel --url http://localhost:25565 --url http://localhost:8000 &
-        
-        sleep 10
-        echo ""
-        echo "✅ Tunnels active! Check logs above for URL."
-
-        # Keep alive
+        echo "⏳ Keeping tunnels alive..."
         while true; do
           sleep 60
           echo "⏰ Tunnels still active - $(date)"
