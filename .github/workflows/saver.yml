@@ -1,4 +1,4 @@
-name: Eaglercraft Public Server
+name: Eaglercraft Public Server saver
 
 on:
   workflow_dispatch:
@@ -33,7 +33,33 @@ jobs:
           echo "ℹ️ No world backup found, starting fresh."
         fi
 
-    - name: Start Server
+    - name: Create Web Directory & Copy index.html
+      run: |
+        mkdir -p web
+        if [ -f "index.html" ]; then
+          cp index.html web/
+          echo "✅ Copied index.html to web/"
+        else
+          echo "⚠️ index.html not found, creating placeholder..."
+          cat > web/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head><title>File Server</title></head>
+<body>
+<h1>📁 File Server</h1>
+<p>Place your index.html in the repo root to serve it here.</p>
+</body>
+</html>
+EOF
+        fi
+
+    - name: Start Python HTTP Server (Port 8000)
+      run: |
+        cd web
+        python3 -m http.server 8000 &
+        echo "✅ Web server started on port 8000"
+
+    - name: Start Eaglercraft Server (Port 25565)
       run: |
         cd server
         chmod +x run.sh
@@ -47,15 +73,34 @@ jobs:
         curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
         chmod +x cloudflared
 
-    - name: Get Public URL
+    - name: Get Public URLs (Both Services)
       run: |
         echo "================================================"
-        echo "🌐 SERVER IS PUBLIC AT:"
+        echo "🌐 PUBLIC URLs:"
         echo "================================================"
         echo ""
-        echo "  ⚠️  This URL will change every run!"
+        echo "  🎮 EAGLERCRAFT:   https://tunnel-url/"
+        echo "  📁 MEDIA PLAYER:  https://tunnel-url/a"
         echo ""
-        ./cloudflared tunnel --url http://localhost:25565
+        echo "  ⚠️  URL changes every run!"
+        echo "================================================"
+        echo ""
+        echo "🚀 Starting tunnel for both ports..."
+        echo "   (Eaglercraft on 25565, Web on 8000)"
+        echo ""
+
+        # Run both services through the same tunnel
+        ./cloudflared tunnel --url http://localhost:25565 --url http://localhost:8000 &
+        
+        sleep 10
+        echo ""
+        echo "✅ Tunnels active! Check logs above for URL."
+
+        # Keep alive
+        while true; do
+          sleep 60
+          echo "⏰ Tunnels still active - $(date)"
+        done
 
     - name: Commit World Back to Repo
       if: always()
@@ -65,7 +110,7 @@ jobs:
           rm -rf world
           cp -r server/world world
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.github.com"
           git add world
           git diff --staged --quiet || git commit -m "💾 Auto-save world [skip ci]"
           git push
